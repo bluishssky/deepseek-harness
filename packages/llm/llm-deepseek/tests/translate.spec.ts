@@ -328,6 +328,23 @@ describe('translate: defensive tool-call branches', () => {
     ])
   })
 
+  it('keeps the first non-empty id and name when later deltas repeat them empty', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      // v4-flash at high reasoning effort repeats function objects with empty
+      // name/id on every argument fragment; the first non-empty values must win.
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_00_x', type: 'function', function: { name: 'get_weather', arguments: '' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: '', function: { name: '', arguments: '{"city"' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: '', function: { name: '', arguments: ': "Paris"}' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      DONE,
+    )))
+    const ends = chunks.filter(chunk => chunk.type === 'block-end')
+    expect(ends).toEqual([
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_00_x', name: 'get_weather', arguments: '{"city": "Paris"}' } },
+    ])
+  })
+
   it('handles tool_call deltas with a function object but no arguments field', async () => {
     const chunks = await collect(translate(feed(
       firstChunk,
